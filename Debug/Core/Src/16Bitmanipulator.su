@@ -1,0 +1,3 @@
+../Core/Src/16Bitmanipulator.c:9:6:intTo16Bit	24	static
+../Core/Src/16Bitmanipulator.c:14:5:bit16ToInt	24	static
+../Core/Src/16Bitmanipulator.c:22:6:merge16	32	static

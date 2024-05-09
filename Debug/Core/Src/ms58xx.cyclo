@@ -1,0 +1,6 @@
+../Core/Src/ms58xx.c:20:19:MS58xx_read	1
+../Core/Src/ms58xx.c:35:19:MS58xx_write	1
+../Core/Src/ms58xx.c:49:19:MS58xx_reset	1
+../Core/Src/ms58xx.c:73:19:MS58xx_coeff	1
+../Core/Src/ms58xx.c:102:10:MS58xx_ADC	6
+../Core/Src/ms58xx.c:156:6:MS58xx_get_values	10

@@ -1,0 +1,5 @@
+../Core/Src/pid.c:10:6:pid_param	24	static
+../Core/Src/pid.c:16:6:pid_input	16	static
+../Core/Src/pid.c:20:7:pid_output	16	static
+../Core/Src/pid.c:24:6:pid_calculate_rad	40	static
+../Core/Src/pid.c:48:6:pid_calculate	40	static

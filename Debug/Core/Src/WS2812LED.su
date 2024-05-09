@@ -1,0 +1,4 @@
+../Core/Src/WS2812LED.c:10:6:Set_LED	24	static
+../Core/Src/WS2812LED.c:17:6:Set_Brightness	16	static
+../Core/Src/WS2812LED.c:31:6:WS2812_Send	56	static
+../Core/Src/WS2812LED.c:62:6:Reset_LED	16	static
