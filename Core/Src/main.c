@@ -41,9 +41,9 @@
 /* USER CODE BEGIN PD */
 
 // Timer Define PWM Thruster
-#define send_H_FR TIM4->CCR1
+#define send_H_FR TIM4->CCR2
 #define send_H_FL TIM4->CCR4
-#define send_H_BR TIM4->CCR2
+#define send_H_BR TIM4->CCR1
 #define send_H_BL TIM4->CCR3
 #define send_V_FR TIM5->CCR1
 #define send_V_FL TIM5->CCR4
@@ -165,11 +165,11 @@ int V_FRoffset = -20, V_FLoffset = -20, V_BRoffset = -20, V_BLoffset = -20;
 //Voltmeter Variable
 uint32_t adc1_value[2];
 int batt1_adc, batt2_adc;
-int batt1adc_min = 3243, batt1adc_max = 3639;
-int batt2adc_min = 3243, batt2adc_max = 3639;
+int batt1adc_min = 3250, batt1adc_max = 3630;
+int batt2adc_min = 2210, batt2adc_max = 2490;
 float batt1_volt, batt2_volt;
 float batt1_min = 22.2, batt1_max = 25.2;
-float batt2_min = 22.2, batt2_max = 25.2;
+float batt2_min = 14.8, batt2_max = 16.8;
 
 //Lumen
 int lumen_pwm;
@@ -868,18 +868,18 @@ void StartCdcSerialTask(void const * argument)
 		set_point[3] = bit16ToInt(i + 6, serialBuffer);
 
 		i = 22;
-		c_yaw[0] = bit16ToInt(i, serialBuffer);
-		c_yaw[1] = bit16ToInt(i + 2, serialBuffer);
-		c_yaw[2] = bit16ToInt(i + 4, serialBuffer);
-		c_pitch[0] = bit16ToInt(i + 6, serialBuffer);
-		c_pitch[1] = bit16ToInt(i + 8, serialBuffer);
-		c_pitch[2] = bit16ToInt(i + 10, serialBuffer);
-		c_roll[0] = bit16ToInt(i + 12, serialBuffer);
-		c_roll[1] = bit16ToInt(i + 14, serialBuffer);
-		c_roll[2] = bit16ToInt(i + 16, serialBuffer);
-		c_depth[0] = bit16ToInt(i + 18, serialBuffer);
-		c_depth[1] = bit16ToInt(i + 20, serialBuffer);
-		c_depth[2] = bit16ToInt(i + 22, serialBuffer);
+		c_yaw[0] = bit16ToInt(i, serialBuffer)/100;
+		c_yaw[1] = bit16ToInt(i + 2, serialBuffer)/100;
+		c_yaw[2] = bit16ToInt(i + 4, serialBuffer)/100;
+		c_pitch[0] = bit16ToInt(i + 6, serialBuffer)/100;
+		c_pitch[1] = bit16ToInt(i + 8, serialBuffer)/100;
+		c_pitch[2] = bit16ToInt(i + 10, serialBuffer)/100;
+		c_roll[0] = bit16ToInt(i + 12, serialBuffer)/100;
+		c_roll[1] = bit16ToInt(i + 14, serialBuffer)/100;
+		c_roll[2] = bit16ToInt(i + 16, serialBuffer)/100;
+		c_depth[0] = bit16ToInt(i + 18, serialBuffer)/100;
+		c_depth[1] = bit16ToInt(i + 20, serialBuffer)/100;
+		c_depth[2] = bit16ToInt(i + 22, serialBuffer)/100;
 
 		i = 46;
 		lumen_power = bit16ToInt(i, serialBuffer);
@@ -946,7 +946,7 @@ void StartMovementTask(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-		//Movement Calculation
+//		Movement Calculation
 		if (movement_mode == 0) { // Fully Manual
 			//Horizontal Thruster  Forwaed  |||   Lateral   |||    Yaw
 			H_FR = +vel_linear[0] - vel_linear[1] + vel_angular[2];
@@ -1105,7 +1105,7 @@ void StartGetPressureTask(void const * argument)
 		//pressure(Bar)
 		pressureInside = MS5803_pressure / 1000;
 		//depth(cm) = pressure(mbar) / (water density(kg/m3) * gravity(m/s2) * 10)
-		depthValue = round(MS5837_pressure / (9.81 * 100.0)) / 100.0;;
+		depthValue = MS5837_pressure / (9.81 * 1000.0);
 
     osDelay(1);
   }
