@@ -80,6 +80,7 @@ osThreadId movementTaskHandle;
 osThreadId getPressureTaskHandle;
 osThreadId stroboTaskHandle;
 osThreadId otherTaskHandle;
+osThreadId pidTaskHandle;
 /* USER CODE BEGIN PV */
 
 //PC Serial Variable
@@ -95,10 +96,12 @@ int imu_reset;
 int c_yaw[3], c_pitch[3], c_roll[3], c_depth[3]; //pid constans [kp, ki, kd]
 
 	//Transmit
-uint8_t transmitBuffer[14];
+uint8_t transmitBuffer[30];
 int16_t Message_IMU[3];
 int16_t Message_inPressure, Message_depth;
 int16_t Message_batt1, Message_batt2;
+int16_t Message_H_FR, Message_H_FL, Message_H_BR, Message_H_BL;
+int16_t Message_V_FR, Message_V_FL, Message_V_BR, Message_V_BL;
 //int16_t Message_ranges, Message_confidence;
 
 	//Failsafe
@@ -201,6 +204,7 @@ void StartMovementTask(void const * argument);
 void StartGetPressureTask(void const * argument);
 void StartStroboTask(void const * argument);
 void StartOtherTask(void const * argument);
+void StartPidTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -356,6 +360,10 @@ int main(void)
   /* definition and creation of otherTask */
   osThreadDef(otherTask, StartOtherTask, osPriorityIdle, 0, 128);
   otherTaskHandle = osThreadCreate(osThread(otherTask), NULL);
+
+  /* definition and creation of pidTask */
+  osThreadDef(pidTask, StartPidTask, osPriorityHigh, 0, 128);
+  pidTaskHandle = osThreadCreate(osThread(pidTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -801,7 +809,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET);
@@ -819,12 +827,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PC5 */
-  GPIO_InitStruct.Pin = GPIO_PIN_5;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -916,11 +918,8 @@ void StartCdcSerialTask(void const * argument)
 		Message_batt1 = batt1_volt * 100;
 		Message_batt2 = batt2_volt * 100;
 
-//		Message_ranges = scan_ranges;
-//		Message_confidence = confidence;
-
 		int16_t Message_Values[] = { Message_IMU[0],Message_IMU[1], Message_IMU[2], Message_depth, Message_inPressure,
-				Message_batt1, Message_batt2 };
+				Message_batt1, Message_batt2, Message_H_FR, Message_H_FL, Message_H_BR, Message_H_BL, Message_V_FR, Message_V_FL, Message_V_BR, Message_V_BL};
 
 
 		merge16(Message_Values, transmitBuffer,
@@ -943,6 +942,7 @@ void StartCdcSerialTask(void const * argument)
 void StartMovementTask(void const * argument)
 {
   /* USER CODE BEGIN StartMovementTask */
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_2, SET);
   /* Infinite loop */
   for(;;)
   {
@@ -955,10 +955,10 @@ void StartMovementTask(void const * argument)
 			H_BL = -vel_linear[0] + vel_linear[1] + vel_angular[2];
 
 			//Vertical Thruster    Up/Down  |||   Pitch     |||   Roll
-			V_FR = -vel_linear[2] - vel_angular[0] + vel_angular[1];
-			V_FL = -vel_linear[2] - vel_angular[0] - vel_angular[1];
-			V_BR = -vel_linear[2] + vel_angular[0] + vel_angular[1];
-			V_BL = -vel_linear[2] + vel_angular[0] - vel_angular[1];
+			V_FR = vel_linear[2] - vel_angular[0] - vel_angular[1];
+			V_FL = vel_linear[2] - vel_angular[0] + vel_angular[1];
+			V_BR = vel_linear[2] + vel_angular[0] + vel_angular[1];
+			V_BL = vel_linear[2] + vel_angular[0] - vel_angular[1];
 		}
 
 		else if (movement_mode == 1) { // Stabilize
@@ -969,10 +969,10 @@ void StartMovementTask(void const * argument)
 			H_BL = -vel_linear[0] + vel_linear[1] + yaw.output;
 
 			//Vertical Thruster    Up/Down  |||   Pitch     |||   Roll
-			V_FR = -vel_linear[2] - pitch.output - roll.output;
-			V_FL = -vel_linear[2] - pitch.output + roll.output;
-			V_BR = -vel_linear[2] + pitch.output - roll.output;
-			V_BL = -vel_linear[2] + pitch.output + roll.output;
+			V_FR = vel_linear[2] - pitch.output + roll.output;
+			V_FL = vel_linear[2] - pitch.output - roll.output;
+			V_BR = vel_linear[2] + pitch.output - roll.output;
+			V_BL = vel_linear[2] + pitch.output + roll.output;
 		}
 
 		else if (movement_mode == 2) { // Depthhold
@@ -983,10 +983,10 @@ void StartMovementTask(void const * argument)
 			H_BL = -vel_linear[0] + vel_linear[1] + vel_angular[2];
 
 			//Vertical Thruster    Up/Down  |||   Pitch     |||   Roll
-			V_FR = +depth.output - vel_angular[0] + vel_angular[1];
-			V_FL = +depth.output - vel_angular[0] - vel_angular[1];
-			V_BR = +depth.output + vel_angular[0] + vel_angular[1];
-			V_BL = +depth.output + vel_angular[0] - vel_angular[1];
+			V_FR = -depth.output - vel_angular[0] - vel_angular[1];
+			V_FL = -depth.output - vel_angular[0] + vel_angular[1];
+			V_BR = -depth.output + vel_angular[0] + vel_angular[1];
+			V_BL = -depth.output + vel_angular[0] - vel_angular[1];
 		}
 
 		else if (movement_mode == 3) { // Fully Assisted
@@ -997,10 +997,10 @@ void StartMovementTask(void const * argument)
 			H_BL = -vel_linear[0] + vel_linear[1] + yaw.output;
 
 			//Vertical Thruster    Up/Down  |||   Pitch     |||   Roll
-			V_FR = +depth.output - pitch.output - roll.output;
-			V_FL = +depth.output - pitch.output + roll.output;
-			V_BR = +depth.output + pitch.output - roll.output;
-			V_BL = +depth.output + pitch.output + roll.output;
+			V_FR = -depth.output - pitch.output + roll.output;
+			V_FL = -depth.output - pitch.output - roll.output;
+			V_BR = -depth.output + pitch.output - roll.output;
+			V_BL = -depth.output + pitch.output + roll.output;
 		}
 
 		HorizontalMax = fmax(fmax(abs(H_FR), abs(H_FL)),fmax(abs(H_BR), abs(H_BL)));
@@ -1042,6 +1042,16 @@ void StartMovementTask(void const * argument)
 		//Lumen
 		lumen_pwm = map(lumen_power, 0, 100, 1000, 2000);
 		send_Lumen = lumen_pwm;
+
+		//Capture last value to send back to ROS
+		Message_H_FR = H_FR;
+		Message_H_FL = H_FL;
+		Message_H_BR = H_BR;
+		Message_H_BL = H_BL;
+		Message_V_FR = V_FR;
+		Message_V_FL = V_FL;
+		Message_V_BR = V_BR;
+		Message_V_BL = V_BL;
 
 		//Reset IMU
 		IMU_resetStatus_new = imu_reset;
@@ -1127,91 +1137,87 @@ void StartStroboTask(void const * argument)
   {
 		if (led_status == 0) {
 			if (movement_mode == 0) {
-				Set_LED(0, 0, 0, 45);
-				Set_LED(1, 0, 0, 105);
-				Set_LED(2, 0, 0, 105);
-				Set_LED(3, 0, 0, 105);
-				Set_LED(4, 0, 0, 105);
-				Set_LED(5, 0, 0, 105);
-				WS2812_Send(&htim3, TIM_CHANNEL_2, 105);
-				osDelay(150);
-				Set_LED(0, 0, 0, 0);
-				Set_LED(1, 0, 0, 0);
-				Set_LED(2, 0, 0, 0);
-				Set_LED(3, 0, 0, 0);
-				Set_LED(4, 0, 0, 0);
-				Set_LED(5, 0, 0, 0);
-				WS2812_Send(&htim3, TIM_CHANNEL_2, 105);
-				osDelay(150);
+				for (int i = 1; i <= 5; i++) {
+					// Clear all LEDs
+					for (int j = 0; j < 11; j++) {
+						Set_LED(j, 0, 0, 0); // Turn off LED
+					}
+					for (int j = 1; j <= i + 1; j++) {
+						Set_LED(j, 0, 0, 255);
+						Set_LED(j - j, 0, 0, 255);
+					}
+					for (int j = 10; j >= 11 - i; j--) {
+						Set_LED(j, 0, 0, 255);
+					}
+					WS2812_Send(&htim3, TIM_CHANNEL_2, 105);
+					osDelay(120); // Adjust as needed
+				}
 			} else if (movement_mode == 1) {
-				Set_LED(0, 30, 0, 30);
-				Set_LED(1, 255, 0, 255);
-				Set_LED(2, 255, 0, 255);
-				Set_LED(3, 255, 0, 255);
-				Set_LED(4, 255, 0, 255);
-				Set_LED(5, 255, 0, 255);
-				WS2812_Send(&htim3, TIM_CHANNEL_2, 105);
-				osDelay(150);
-				Set_LED(0, 0, 0, 0);
-				Set_LED(1, 0, 0, 0);
-				Set_LED(2, 0, 0, 0);
-				Set_LED(3, 0, 0, 0);
-				Set_LED(4, 0, 0, 0);
-				Set_LED(5, 0, 0, 0);
-				WS2812_Send(&htim3, TIM_CHANNEL_2, 105);
-				osDelay(150);
+				for (int i = 1; i <= 5; i++) {
+					// Clear all LEDs
+					for (int j = 0; j < 11; j++) {
+						Set_LED(j, 0, 0, 0); // Turn off LED
+					}
+					for (int j = 1; j <= i + 1; j++) {
+						Set_LED(j, 255, 0, 255);
+						Set_LED(j - j, 255, 0, 255);
+					}
+					for (int j = 10; j >= 11 - i; j--) {
+						Set_LED(j, 255, 0, 255);
+					}
+					WS2812_Send(&htim3, TIM_CHANNEL_2, 105);
+					osDelay(120); // Adjust as needed
+				}
 			} else if (movement_mode == 2) {
-				Set_LED(0, 30, 30, 0);
-				Set_LED(1, 255, 255, 0);
-				Set_LED(2, 255, 255, 0);
-				Set_LED(3, 255, 255, 0);
-				Set_LED(4, 255, 255, 0);
-				Set_LED(5, 255, 255, 0);
-				WS2812_Send(&htim3, TIM_CHANNEL_2, 105);
-				osDelay(150);
-				Set_LED(0, 0, 0, 0);
-				Set_LED(1, 0, 0, 0);
-				Set_LED(2, 0, 0, 0);
-				Set_LED(3, 0, 0, 0);
-				Set_LED(4, 0, 0, 0);
-				Set_LED(5, 0, 0, 0);
-				WS2812_Send(&htim3, TIM_CHANNEL_2, 105);
-				osDelay(150);
+				for (int i = 1; i <= 5; i++) {
+					// Clear all LEDs
+					for (int j = 0; j < 11; j++) {
+						Set_LED(j, 0, 0, 0); // Turn off LED
+					}
+					for (int j = 1; j <= i + 1; j++) {
+						Set_LED(j, 255, 255, 0);
+						Set_LED(j - j, 255, 255, 0);
+					}
+					for (int j = 10; j >= 11 - i; j--) {
+						Set_LED(j, 255, 255, 0);
+					}
+					WS2812_Send(&htim3, TIM_CHANNEL_2, 105);
+					osDelay(120); // Adjust as needed
+				}
 			} else if (movement_mode == 3) {
-				Set_LED(0, 45, 0, 0);
-				Set_LED(1, 255, 0, 0);
-				Set_LED(2, 255, 0, 0);
-				Set_LED(3, 255, 0, 0);
-				Set_LED(4, 255, 0, 0);
-				Set_LED(5, 255, 0, 0);
-				WS2812_Send(&htim3, TIM_CHANNEL_2, 105);
-				osDelay(150);
-				Set_LED(0, 0, 0, 0);
-				Set_LED(1, 0, 0, 0);
-				Set_LED(2, 0, 0, 0);
-				Set_LED(3, 0, 0, 0);
-				Set_LED(4, 0, 0, 0);
-				Set_LED(5, 0, 0, 0);
-				WS2812_Send(&htim3, TIM_CHANNEL_2, 105);
-				osDelay(150);
+				for (int i = 1; i <= 5; i++) {
+					// Clear all LEDs
+					for (int j = 0; j < 11; j++) {
+						Set_LED(j, 0, 0, 0); // Turn off LED
+					}
+					for (int j = 1; j <= i + 1; j++) {
+						Set_LED(j, 255, 0, 0);
+						Set_LED(j - j, 255, 0, 0);
+					}
+					for (int j = 10; j >= 11 - i; j--) {
+						Set_LED(j, 255, 0, 0);
+					}
+					WS2812_Send(&htim3, TIM_CHANNEL_2, 105);
+					osDelay(120); // Adjust as needed
+				}
 			}
 		}
 
 		else {
 			// Loop through each LED and light it up progressively
-			    for (int i = 0; i < 11; i++) {
-			        // Clear all LEDs
-			        for (int j = 0; j < 11; j++) {
-			            Set_LED(j, 0, 0, 0); // Turn off LED
-			        }
-			        // Light up LEDs from index 0 to i
-			        for (int j = 0; j <= i; j++) {
-			            Set_LED(j, 255, 0, 0); // Set LED color to red
-			        }
-			        // Send data to LEDs
-			        WS2812_Send(&htim3, TIM_CHANNEL_2, 105); // Assuming you're sending 105 bits of data
-			        osDelay(350); // Delay for 500 ms (adjust as needed for desired speed)
-			    }
+			for (int i = 0; i < 11; i++) {
+				// Clear all LEDs
+				for (int j = 0; j < 11; j++) {
+					Set_LED(j, 0, 0, 0); // Turn off LED
+				}
+				// Light up LEDs from index 0 to i
+				for (int j = 0; j <= i; j++) {
+					Set_LED(j, 255, 0, 0); // Set LED color to red
+				}
+				// Send data to LEDs
+				WS2812_Send(&htim3, TIM_CHANNEL_2, 105); // Assuming you're sending 105 bits of data
+				osDelay(350); // Delay for 500 ms (adjust as needed for desired speed)
+			}
 			led_status = 0;
 		}
 
@@ -1251,6 +1257,44 @@ void StartOtherTask(void const * argument)
     osDelay(1);
   }
   /* USER CODE END StartOtherTask */
+}
+
+/* USER CODE BEGIN Header_StartPidTask */
+/**
+* @brief Function implementing the pidTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartPidTask */
+void StartPidTask(void const * argument)
+{
+  /* USER CODE BEGIN StartPidTask */
+  /* Infinite loop */
+  for(;;)
+  {
+	  pid_param(&yaw, c_yaw[0], c_yaw[1], c_yaw[2]);
+	  pid_param(&pitch, c_pitch[0], c_pitch[1], c_pitch[2]);
+	  pid_param(&roll, c_roll[0], c_roll[1], c_roll[2]);
+	  pid_param(&depth, c_depth[0], c_depth[1], c_depth[2]);
+
+	  yaw.input = bno055_yaw;
+	  pitch.input = bno055_pitch;
+	  roll.input = bno055_roll;
+	  depth.input = depthValue;
+
+	  yaw.setpoint = set_point[0];
+	  pitch.setpoint = set_point[1];
+	  roll.setpoint = set_point[2];
+	  depth.setpoint = set_point[3];
+
+	  pid_calculate_rad(&yaw);
+	  pid_calculate_rad(&pitch);
+	  pid_calculate_rad(&roll);
+	  pid_calculate(&depth);
+
+    osDelay(1);
+  }
+  /* USER CODE END StartPidTask */
 }
 
 /**
